@@ -1,0 +1,4 @@
+platform,post_id,author,post_url,text,impressions,views,likes,comments,shares,saves
+tiktok,tt001,creator_a,https://example.com/tt001,Great product!,500000,500000,25000,1000,2000,0
+instagram,ig001,creator_b,https://example.com/ig001,Loving this!,100000,100000,5000,200,100,300
+x,x001,creator_c,https://example.com/x001,This is interesting,50000,50000,1000,50,30,0
