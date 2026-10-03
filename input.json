@@ -1,0 +1,26 @@
+{
+  "posts": [
+    "https://www.instagram.com/reels/Dd7nsXmtdgg/",
+    "https://www.instagram.com/p/Dd83DbamupX/",
+    "https://www.instagram.com/p/Dd5-H8FE6Ou/"
+  ]
+}
+{
+  "sentiment": {"score": 0.8, "label": "positive"},
+  "topics": [
+    {"topic": "AI/automation", "relevance": 0.9}
+  ],
+  "recommendations": [{
+    "priority_score": 0.85,
+    "actions": [{
+      "action": "investigate_topic",
+      "topic": "AI/automation",
+      "implementation_steps": [
+        "1. Review current workflows",
+        "2. Compare against video insights",
+        "3. Test improvement in sandbox",
+        "4. Measure impact"
+      ]
+    }]
+  }]
+}
