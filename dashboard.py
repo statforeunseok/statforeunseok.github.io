@@ -4,167 +4,58 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from html import escape
 
-DB_PATH = Path(__file__).parent / "social_emv.db"
+
+DB_PATH = Path(__file__).parent / "src" / "social_emv.db"
+
 HOST = "0.0.0.0"
-PORT = 8000
+PORT = 8001
 
 
-def get_database_data():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+def get_posts():
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
 
-    tables = conn.execute("""
-        SELECT name
-        FROM sqlite_master
-        WHERE type='table'
-        AND name NOT LIKE 'sqlite_%'
+    posts = connection.execute("""
+        SELECT
+            platform,
+            post_id,
+            author,
+            post_url,
+            text,
+            impressions,
+            views,
+            likes,
+            comments,
+            shares,
+            saves,
+            engagements,
+            engagement_rate,
+            cpm,
+            emv,
+            created_at
+        FROM posts
+        ORDER BY created_at DESC
     """).fetchall()
 
-    if not tables:
-        conn.close()
-        return [], {}
+    connection.close()
 
-    table_name = tables[0]["name"]
-
-    columns = conn.execute(
-        f'PRAGMA table_info("{table_name}")'
-    ).fetchall()
-
-    column_names = [c["name"] for c in columns]
-
-    rows = conn.execute(
-        f'SELECT * FROM "{table_name}" ORDER BY rowid DESC'
-    ).fetchall()
-
-    data = [dict(row) for row in rows]
-
-    conn.close()
-
-    return column_names, {
-        "table": table_name,
-        "rows": data,
-    }
-
-
-def find_value(row, names, default=0):
-    for name in names:
-        for key in row:
-            if key.lower() == name.lower():
-                value = row[key]
-                if value is not None:
-                    return value
-    return default
-
-
-def number(value):
-    try:
-        return float(value or 0)
-    except (ValueError, TypeError):
-        return 0
+    return [dict(row) for row in posts]
 
 
 def dashboard_html():
-    columns, database = get_database_data()
-    rows = database.get("rows", [])
-    table_name = database.get("table", "unknown")
+    posts = get_posts()
 
-    total_emv = 0
-    total_views = 0
-    total_engagements = 0
-    total_posts = len(rows)
+    # Convert SQLite data to JSON for browser JavaScript
+    posts_json = json.dumps(posts, ensure_ascii=False)
 
-    platform_stats = {}
-
-    for row in rows:
-        emv = number(find_value(row, [
-            "emv",
-            "EMV",
-            "earned_media_value"
-        ]))
-
-        views = number(find_value(row, [
-            "views",
-            "view",
-            "impressions"
-        ]))
-
-        engagements = number(find_value(row, [
-            "engagements",
-            "engagement",
-            "total_engagements"
-        ]))
-
-        platform = find_value(row, [
-            "platform",
-            "Platform"
-        ], "unknown")
-
-        total_emv += emv
-        total_views += views
-        total_engagements += engagements
-
-        platform = str(platform)
-
-        if platform not in platform_stats:
-            platform_stats[platform] = {
-                "posts": 0,
-                "emv": 0,
-                "engagements": 0,
-            }
-
-        platform_stats[platform]["posts"] += 1
-        platform_stats[platform]["emv"] += emv
-        platform_stats[platform]["engagements"] += engagements
-
-    engagement_rate = (
-        total_engagements / total_views * 100
-        if total_views
-        else 0
-    )
-
-    platform_html = ""
-
-    for platform, stats in platform_stats.items():
-        platform_html += f"""
-        <tr>
-            <td>{escape(platform)}</td>
-            <td>{stats["posts"]:,}</td>
-            <td>${stats["emv"]:,.2f}</td>
-            <td>{stats["engagements"]:,}</td>
-        </tr>
-        """
-
-    rows_html = ""
-
-    for row in rows:
-        platform = find_value(row, ["platform"], "-")
-        post_id = find_value(row, ["post_id"], "-")
-        views = number(find_value(row, ["views", "impressions"]))
-        engagements = number(find_value(row, ["engagements"]))
-        emv = number(find_value(row, ["emv"]))
-
-        rows_html += f"""
-        <tr>
-            <td>{escape(str(platform))}</td>
-            <td>{escape(str(post_id))}</td>
-            <td>{views:,.0f}</td>
-            <td>{engagements:,.0f}</td>
-            <td>${emv:,.2f}</td>
-        </tr>
-        """
-
-    if not rows_html:
-        rows_html = """
-        <tr>
-            <td colspan="5">ยังไม่มีข้อมูลในฐานข้อมูล</td>
-        </tr>
-        """
-
-    return f"""<!DOCTYPE html>
+    return f"""
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>Social EMV Dashboard</title>
 
@@ -182,29 +73,49 @@ body {{
 }}
 
 .container {{
-    max-width: 1200px;
+    max-width: 1400px;
     margin: auto;
-    padding: 35px 20px;
+    padding: 35px 25px;
 }}
 
-.header {{
-    margin-bottom: 30px;
-}}
-
-.header h1 {{
+h1 {{
     margin: 0;
     font-size: 32px;
 }}
 
-.header p {{
+.subtitle {{
     color: #94a3b8;
+    margin-top: 8px;
+    margin-bottom: 28px;
+}}
+
+.toolbar {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 25px;
+}}
+
+select,
+button {{
+    background: #1e293b;
+    color: white;
+    border: 1px solid #475569;
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-size: 14px;
+    cursor: pointer;
+}}
+
+button:hover {{
+    background: #334155;
 }}
 
 .cards {{
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 18px;
-    margin-bottom: 30px;
+    margin-bottom: 25px;
 }}
 
 .card {{
@@ -214,31 +125,38 @@ body {{
     padding: 22px;
 }}
 
-.card-title {{
+.label {{
     color: #94a3b8;
-    font-size: 14px;
+    font-size: 13px;
     margin-bottom: 10px;
 }}
 
-.card-value {{
-    font-size: 28px;
+.value {{
+    font-size: 30px;
     font-weight: bold;
 }}
 
-.emv {{
+.green {{
     color: #22c55e;
 }}
 
-.engagement {{
-    color: #f59e0b;
-}}
-
-.views {{
+.blue {{
     color: #38bdf8;
 }}
 
-.rate {{
+.orange {{
+    color: #f59e0b;
+}}
+
+.purple {{
     color: #a78bfa;
+}}
+
+.grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-bottom: 25px;
 }}
 
 .section {{
@@ -247,10 +165,51 @@ body {{
     border-radius: 16px;
     padding: 22px;
     margin-bottom: 25px;
+    overflow-x: auto;
 }}
 
 .section h2 {{
     margin-top: 0;
+}}
+
+.chart {{
+    min-height: 280px;
+}}
+
+.bar-row {{
+    display: grid;
+    grid-template-columns: 100px 1fr 110px;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+}}
+
+.bar-label {{
+    font-weight: bold;
+    text-transform: capitalize;
+}}
+
+.bar-background {{
+    height: 28px;
+    background: #334155;
+    border-radius: 8px;
+    overflow: hidden;
+}}
+
+.bar {{
+    height: 100%;
+    border-radius: 8px;
+    background: linear-gradient(
+        90deg,
+        #38bdf8,
+        #8b5cf6
+    );
+    transition: width 0.4s ease;
+}}
+
+.bar-value {{
+    text-align: right;
+    font-weight: bold;
 }}
 
 table {{
@@ -258,113 +217,169 @@ table {{
     border-collapse: collapse;
 }}
 
-th, td {{
-    text-align: left;
-    padding: 13px;
-    border-bottom: 1px solid #334155;
-}}
-
 th {{
     color: #94a3b8;
     font-size: 13px;
+    text-align: left;
 }}
 
+th,
 td {{
-    color: #e2e8f0;
+    padding: 13px;
+    border-bottom: 1px solid #334155;
+    white-space: nowrap;
 }}
 
-.badge {{
-    display: inline-block;
-    background: #334155;
-    padding: 5px 10px;
-    border-radius: 999px;
+.platform {{
+    text-transform: capitalize;
+    font-weight: bold;
+}}
+
+.empty {{
+    color: #94a3b8;
+    text-align: center;
+    padding: 40px;
 }}
 
 .footer {{
     color: #64748b;
     font-size: 13px;
-    margin-top: 25px;
+    margin-top: 20px;
 }}
 
-@media (max-width: 800px) {{
+@media (max-width: 900px) {{
+
     .cards {{
         grid-template-columns: repeat(2, 1fr);
     }}
+
+    .grid {{
+        grid-template-columns: 1fr;
+    }}
+
 }}
 
 @media (max-width: 500px) {{
+
     .cards {{
         grid-template-columns: 1fr;
     }}
 
-    table {{
-        font-size: 12px;
+    .bar-row {{
+        grid-template-columns: 75px 1fr 80px;
     }}
+
 }}
 
 </style>
+
 </head>
 
 <body>
 
 <div class="container">
 
-<div class="header">
-    <h1>📊 Social EMV Dashboard</h1>
-    <p>Social Media Earned Media Value Tracker</p>
+<h1>📊 Social EMV Dashboard</h1>
+
+<div class="subtitle">
+Social media performance & earned media value
 </div>
+
+<div class="toolbar">
+
+<select id="platformFilter" onchange="updateDashboard()">
+    <option value="all">All Platforms</option>
+    <option value="tiktok">TikTok</option>
+    <option value="instagram">Instagram</option>
+    <option value="x">X</option>
+</select>
+
+<button onclick="location.reload()">
+    🔄 Refresh Data
+</button>
+
+</div>
+
+
+<!-- KPI CARDS -->
 
 <div class="cards">
 
 <div class="card">
-    <div class="card-title">TOTAL EMV</div>
-    <div class="card-value emv">${total_emv:,.2f}</div>
+<div class="label">TOTAL EMV</div>
+<div id="totalEmv" class="value green">$0.00</div>
 </div>
 
 <div class="card">
-    <div class="card-title">TOTAL ENGAGEMENTS</div>
-    <div class="card-value engagement">
-        {total_engagements:,.0f}
-    </div>
+<div class="label">TOTAL VIEWS</div>
+<div id="totalViews" class="value blue">0</div>
 </div>
 
 <div class="card">
-    <div class="card-title">TOTAL VIEWS</div>
-    <div class="card-value views">
-        {total_views:,.0f}
-    </div>
+<div class="label">ENGAGEMENTS</div>
+<div id="totalEngagements" class="value orange">0</div>
 </div>
 
 <div class="card">
-    <div class="card-title">ENGAGEMENT RATE</div>
-    <div class="card-value rate">
-        {engagement_rate:.2f}%
-    </div>
+<div class="label">ENGAGEMENT RATE</div>
+<div id="engagementRate" class="value purple">0.00%</div>
 </div>
 
 </div>
+
+
+<!-- SECOND KPI ROW -->
+
+<div class="cards">
+
+<div class="card">
+<div class="label">❤️ LIKES</div>
+<div id="totalLikes" class="value">0</div>
+</div>
+
+<div class="card">
+<div class="label">💬 COMMENTS</div>
+<div id="totalComments" class="value">0</div>
+</div>
+
+<div class="card">
+<div class="label">🔄 SHARES</div>
+<div id="totalShares" class="value">0</div>
+</div>
+
+<div class="card">
+<div class="label">📝 POSTS</div>
+<div id="totalPosts" class="value">0</div>
+</div>
+
+</div>
+
+
+<!-- CHARTS -->
+
+<div class="grid">
 
 <div class="section">
 
-<h2>📱 Platform Performance</h2>
+<h2>💰 EMV by Platform</h2>
 
-<table>
-<thead>
-<tr>
-    <th>Platform</th>
-    <th>Posts</th>
-    <th>EMV</th>
-    <th>Engagements</th>
-</tr>
-</thead>
-
-<tbody>
-{platform_html}
-</tbody>
-
-</table>
+<div id="emvChart" class="chart"></div>
 
 </div>
+
+
+<div class="section">
+
+<h2>📈 Engagements by Platform</h2>
+
+<div id="engagementChart" class="chart"></div>
+
+</div>
+
+</div>
+
+
+<!-- POSTS -->
 
 <div class="section">
 
@@ -373,28 +388,339 @@ td {{
 <table>
 
 <thead>
+
 <tr>
-    <th>Platform</th>
-    <th>Post ID</th>
-    <th>Views</th>
-    <th>Engagements</th>
-    <th>EMV</th>
+<th>Platform</th>
+<th>Post ID</th>
+<th>Views</th>
+<th>Likes</th>
+<th>Comments</th>
+<th>Shares</th>
+<th>Engagements</th>
+<th>Rate</th>
+<th>EMV</th>
 </tr>
+
 </thead>
 
-<tbody>
-{rows_html}
-</tbody>
+<tbody id="postTable"></tbody>
 
 </table>
 
 </div>
 
+
 <div class="footer">
-    Database: {escape(table_name)} · {total_posts} posts
+Database: src/social_emv.db
 </div>
 
 </div>
+
+
+<script>
+
+const posts = {posts_json};
+
+
+function formatNumber(number) {{
+    return Number(number || 0).toLocaleString();
+}}
+
+
+function formatMoney(number) {{
+    return "$" + Number(number || 0).toLocaleString(
+        undefined,
+        {{
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }}
+    );
+}}
+
+
+function calculateData(filteredPosts) {{
+
+    let totalEmv = 0;
+    let totalViews = 0;
+    let totalEngagements = 0;
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+
+    filteredPosts.forEach(post => {{
+
+        totalEmv += Number(post.emv || 0);
+        totalViews += Number(post.views || 0);
+        totalEngagements += Number(post.engagements || 0);
+        totalLikes += Number(post.likes || 0);
+        totalComments += Number(post.comments || 0);
+        totalShares += Number(post.shares || 0);
+
+    }});
+
+    const rate =
+        totalViews > 0
+        ? (totalEngagements / totalViews) * 100
+        : 0;
+
+    document.getElementById("totalEmv").textContent =
+        formatMoney(totalEmv);
+
+    document.getElementById("totalViews").textContent =
+        formatNumber(totalViews);
+
+    document.getElementById("totalEngagements").textContent =
+        formatNumber(totalEngagements);
+
+    document.getElementById("engagementRate").textContent =
+        rate.toFixed(2) + "%";
+
+    document.getElementById("totalLikes").textContent =
+        formatNumber(totalLikes);
+
+    document.getElementById("totalComments").textContent =
+        formatNumber(totalComments);
+
+    document.getElementById("totalShares").textContent =
+        formatNumber(totalShares);
+
+    document.getElementById("totalPosts").textContent =
+        filteredPosts.length;
+}}
+
+
+function getPlatformStats(filteredPosts) {{
+
+    const stats = {{}};
+
+    filteredPosts.forEach(post => {{
+
+        const platform = post.platform;
+
+        if (!stats[platform]) {{
+
+            stats[platform] = {{
+                emv: 0,
+                engagements: 0
+            }};
+
+        }}
+
+        stats[platform].emv +=
+            Number(post.emv || 0);
+
+        stats[platform].engagements +=
+            Number(post.engagements || 0);
+
+    }});
+
+    return stats;
+}}
+
+
+function renderChart(elementId, stats, metric, money) {{
+
+    const element =
+        document.getElementById(elementId);
+
+    const platforms =
+        Object.keys(stats);
+
+    if (platforms.length === 0) {{
+
+        element.innerHTML =
+            '<div class="empty">No data</div>';
+
+        return;
+
+    }}
+
+    const values =
+        platforms.map(
+            platform => stats[platform][metric]
+        );
+
+    const max =
+        Math.max(...values, 1);
+
+    let html = "";
+
+    platforms.forEach(platform => {{
+
+        const value =
+            stats[platform][metric];
+
+        const width =
+            (value / max) * 100;
+
+        const displayValue =
+            money
+            ? formatMoney(value)
+            : formatNumber(value);
+
+        html += `
+            <div class="bar-row">
+
+                <div class="bar-label">
+                    ${{platform}}
+                </div>
+
+                <div class="bar-background">
+
+                    <div
+                        class="bar"
+                        style="width: ${{width}}%"
+                    ></div>
+
+                </div>
+
+                <div class="bar-value">
+                    ${{displayValue}}
+                </div>
+
+            </div>
+        `;
+
+    }});
+
+    element.innerHTML = html;
+}}
+
+
+function renderTable(filteredPosts) {{
+
+    const table =
+        document.getElementById("postTable");
+
+    if (filteredPosts.length === 0) {{
+
+        table.innerHTML = `
+            <tr>
+                <td colspan="9" class="empty">
+                    No posts found
+                </td>
+            </tr>
+        `;
+
+        return;
+
+    }}
+
+    let html = "";
+
+    filteredPosts.forEach(post => {{
+
+        const rate =
+            Number(post.engagement_rate || 0) * 100;
+
+        html += `
+
+        <tr>
+
+            <td class="platform">
+                ${{escapeHtml(post.platform)}}
+            </td>
+
+            <td>
+                ${{escapeHtml(post.post_id)}}
+            </td>
+
+            <td>
+                ${{formatNumber(post.views)}}
+            </td>
+
+            <td>
+                ${{formatNumber(post.likes)}}
+            </td>
+
+            <td>
+                ${{formatNumber(post.comments)}}
+            </td>
+
+            <td>
+                ${{formatNumber(post.shares)}}
+            </td>
+
+            <td>
+                ${{formatNumber(post.engagements)}}
+            </td>
+
+            <td>
+                ${{rate.toFixed(2)}}%
+            </td>
+
+            <td>
+                ${{formatMoney(post.emv)}}
+            </td>
+
+        </tr>
+
+        `;
+
+    }});
+
+    table.innerHTML = html;
+}}
+
+
+function escapeHtml(value) {{
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}}
+
+
+function updateDashboard() {{
+
+    const selected =
+        document.getElementById(
+            "platformFilter"
+        ).value;
+
+    let filteredPosts = posts;
+
+    if (selected !== "all") {{
+
+        filteredPosts =
+            posts.filter(
+                post =>
+                    post.platform === selected
+            );
+
+    }}
+
+    calculateData(filteredPosts);
+
+    const stats =
+        getPlatformStats(filteredPosts);
+
+    renderChart(
+        "emvChart",
+        stats,
+        "emv",
+        true
+    );
+
+    renderChart(
+        "engagementChart",
+        stats,
+        "engagements",
+        false
+    );
+
+    renderTable(filteredPosts);
+
+}}
+
+
+updateDashboard();
+
+</script>
 
 </body>
 </html>
@@ -404,32 +730,44 @@ td {{
 class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-        if self.path == "/" or self.path.startswith("/?"):
-            html = dashboard_html()
 
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
+        html = dashboard_html()
 
-            self.wfile.write(html.encode("utf-8"))
+        self.send_response(200)
 
-        else:
-            self.send_response(404)
-            self.end_headers()
+        self.send_header(
+            "Content-Type",
+            "text/html; charset=utf-8"
+        )
+
+        self.send_header(
+            "Cache-Control",
+            "no-cache"
+        )
+
+        self.end_headers()
+
+        self.wfile.write(
+            html.encode("utf-8")
+        )
 
     def log_message(self, format, *args):
-        print(f"[Dashboard] {args[0]}")
+        pass
 
 
-if __name__ == "__main__":
-    print("=" * 40)
-    print("       SOCIAL EMV DASHBOARD")
-    print("=" * 40)
-    print()
-    print("Dashboard running on port 8000")
-    print("Open the forwarded port in GitHub Codespaces")
-    print()
+print("========================================")
+print("       SOCIAL EMV DASHBOARD")
+print("========================================")
+print()
+print("Dashboard running on port 8001")
+print()
+print("Database:")
+print(DB_PATH)
+print()
 
-    server = HTTPServer((HOST, PORT), DashboardHandler)
-    server.serve_forever()
+server = HTTPServer(
+    (HOST, PORT),
+    DashboardHandler
+)
+
+server.serve_forever()
