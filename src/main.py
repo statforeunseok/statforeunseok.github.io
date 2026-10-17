@@ -9,9 +9,9 @@ from database import (
 
 
 CPM = {
-    "instagram": 10.0,
-    "tiktok": 8.0,
-    "x": 6.0,
+    "instagram": 7.5,
+    "tiktok": 9.5,
+    "x": 6.5,
 }
 
 
