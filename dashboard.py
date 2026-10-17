@@ -1,3 +1,4 @@
+
 import sqlite3
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -438,6 +439,39 @@ function formatMoney(number) {{
 }}
 
 
+// Calculate EMV using the new formula.
+// Sentiment is always Neutral (multiplier = 1.0).
+function calculate_emv(post) {{
+
+    const impressions = Number(post.impressions || 0);
+    const cpm = Number(post.cpm || 0);
+
+    const likes = Number(post.likes || 0);
+    const comments = Number(post.comments || 0);
+    const shares = Number(post.shares || 0);
+    const saves = Number(post.saves || 0);
+
+    // Step 1: Reach Value
+    const reachValue =
+        (impressions / 1000) * cpm;
+
+    // Step 2: Engagement Value
+    const engagementValue =
+        (likes * 0.10) +
+        (comments * 0.50) +
+        (shares * 1.00) +
+        (saves * 1.50);
+
+    // Step 3: Adjusted Engagement
+    // Neutral sentiment multiplier = 1.0
+    const adjustedEngagement =
+        engagementValue * 1.0;
+
+    // Step 4: Total EMV
+    return reachValue + adjustedEngagement;
+}}
+
+
 function calculateData(filteredPosts) {{
 
     let totalEmv = 0;
@@ -449,7 +483,10 @@ function calculateData(filteredPosts) {{
 
     filteredPosts.forEach(post => {{
 
-        totalEmv += Number(post.emv || 0);
+        // Use the new EMV calculation
+        totalEmv += calculate_emv(post);
+
+        // Keep existing dashboard metrics unchanged
         totalViews += Number(post.views || 0);
         totalEngagements += Number(post.engagements || 0);
         totalLikes += Number(post.likes || 0);
@@ -506,8 +543,8 @@ function getPlatformStats(filteredPosts) {{
 
         }}
 
-        stats[platform].emv +=
-            Number(post.emv || 0);
+        // Use the new EMV calculation for the chart
+        stats[platform].emv += calculate_emv(post);
 
         stats[platform].engagements +=
             Number(post.engagements || 0);
@@ -562,7 +599,7 @@ function renderChart(elementId, stats, metric, money) {{
             <div class="bar-row">
 
                 <div class="bar-label">
-                    ${{platform}}
+                    ${{escapeHtml(platform)}}
                 </div>
 
                 <div class="bar-background">
@@ -613,6 +650,9 @@ function renderTable(filteredPosts) {{
         const rate =
             Number(post.engagement_rate || 0) * 100;
 
+        // Use the new EMV calculation for each post
+        const emv = calculate_emv(post);
+
         html += `
 
         <tr>
@@ -650,7 +690,7 @@ function renderTable(filteredPosts) {{
             </td>
 
             <td>
-                ${{formatMoney(post.emv)}}
+                ${{formatMoney(emv)}}
             </td>
 
         </tr>
@@ -731,43 +771,53 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
 
-        html = dashboard_html()
+        try:
+            html = dashboard_html()
 
-        self.send_response(200)
+            self.send_response(200)
 
-        self.send_header(
-            "Content-Type",
-            "text/html; charset=utf-8"
-        )
+            self.send_header(
+                "Content-Type",
+                "text/html; charset=utf-8"
+            )
 
-        self.send_header(
-            "Cache-Control",
-            "no-cache"
-        )
+            self.send_header(
+                "Cache-Control",
+                "no-cache"
+            )
 
-        self.end_headers()
+            self.end_headers()
 
-        self.wfile.write(
-            html.encode("utf-8")
-        )
+            self.wfile.write(
+                html.encode("utf-8")
+            )
+
+        except Exception as error:
+            self.send_error(500, str(error))
 
     def log_message(self, format, *args):
         pass
 
 
-print("========================================")
-print("       SOCIAL EMV DASHBOARD")
-print("========================================")
-print()
-print("Dashboard running on port 8001")
-print()
-print("Database:")
-print(DB_PATH)
-print()
+if __name__ == "__main__":
 
-server = HTTPServer(
-    (HOST, PORT),
-    DashboardHandler
-)
+    print("========================================")
+    print("       SOCIAL EMV DASHBOARD")
+    print("========================================")
+    print()
+    print("Dashboard running on port 8001")
+    print()
+    print("Database:")
+    print(DB_PATH)
+    print()
 
-server.serve_forever()
+    server = HTTPServer(
+        (HOST, PORT),
+        DashboardHandler
+    )
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nDashboard stopped.")
+        server.server_close()
