@@ -1,11 +1,11 @@
 platforms:
   instagram:
-    cpm: 10.0
+    cpm: 7.5
 
   tiktok:
-    cpm: 8.0
+    cpm: 9.5
 
   x:
-    cpm: 6.0
+    cpm: 6.5
 
 currency: USD
