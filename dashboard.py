@@ -9,7 +9,7 @@ from html import escape
 DB_PATH = Path(__file__).parent / "src" / "social_emv.db"
 
 HOST = "0.0.0.0"
-PORT = 8001
+PORT = 8002
 
 
 def get_posts():
